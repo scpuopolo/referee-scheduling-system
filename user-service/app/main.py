@@ -1,9 +1,10 @@
+from app.models import HealthCheckResponse
 from fastapi import FastAPI
 
 app = FastAPI()
 
 
-@app.get("/health")
+@app.get("/health", response_model=HealthCheckResponse)
 async def health_check():
     """
     Health check endpoint for the user service.
@@ -19,8 +20,8 @@ async def health_check():
     Or status 503 if the service or its dependencies are unhealthy.
     """
 
-    return {
-        "service": "user-service",
-        "status": "healthy",
-        "dependencies": None,
-    }
+    return HealthCheckResponse(
+        service="user-service",
+        status="healthy",
+        dependencies=None
+    )

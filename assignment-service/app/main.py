@@ -2,6 +2,7 @@ import os
 from datetime import datetime, timezone
 
 import httpx
+from app.models import HealthCheckResponse
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
@@ -40,7 +41,7 @@ async def check_dependency_health(base_url: str) -> dict:
     return {"status": status, "response_time_ms": elapsed_ms}
 
 
-@app.get("/health")
+@app.get("/health", response_model=HealthCheckResponse)
 async def health_check():
     """
     Health check endpoint for the assignment service.
@@ -73,16 +74,16 @@ async def health_check():
     if any(dep["status"] != "healthy" for dep in dependencies.values()):
         return JSONResponse(
             status_code=503,
-            content={
-                "service": "assignment-service",
-                "status": "unhealthy",
-                "dependencies": dependencies,
-            },
+            content=HealthCheckResponse(
+                service="assignment-service",
+                status="unhealthy",
+                dependencies=dependencies,
+            ).model_dump()
         )
 
     # Otherwise, return a healthy response
-    return {
-        "service": "assignment-service",
-        "status": "healthy",
-        "dependencies": dependencies,
-    }
+    return HealthCheckResponse(
+        service="assignment-service",
+        status="healthy",
+        dependencies=dependencies,
+    )
