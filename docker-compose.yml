@@ -1,0 +1,55 @@
+services:
+  user-service:
+    build:
+      context: ./user-service
+      dockerfile: Dockerfile
+    container_name: user-service
+    ports:
+      - "8001:8000"
+    # environment:  Empty for now
+    # depends_on:  No dependencies for now
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+  game-service:
+    build:
+      context: ./game-service
+      dockerfile: Dockerfile
+    container_name: game-service
+    ports:
+      - "8002:8000"
+    # environment:  Empty for now
+    # depends_on:  No dependencies for now
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+  assignment-service:
+    build:
+      context: ./assignment-service
+      dockerfile: Dockerfile
+    container_name: assignment-service
+    ports:
+      - "8003:8000"
+    environment:
+      - USER_SERVICE_BASE=http://user-service:8000
+      - GAME_SERVICE_BASE=http://game-service:8000
+    depends_on:
+      user-service:
+        condition: service_healthy
+      game-service:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
