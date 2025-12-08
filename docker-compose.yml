@@ -6,8 +6,11 @@ services:
     container_name: user-service
     ports:
       - "8001:8000"
-    # environment:  Empty for now
-    # depends_on:  No dependencies for now
+    environment:
+      - PG_DSN=${PG_DSN}
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
@@ -15,6 +18,8 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    networks:
+      - scheduling-network
   game-service:
     build:
       context: ./game-service
@@ -53,3 +58,25 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./initdb:/docker-entrypoint-initdb.d
+    networks:
+      - scheduling-network
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+networks:
+  scheduling-network:
+    driver: bridge
