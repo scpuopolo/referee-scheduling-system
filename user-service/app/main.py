@@ -1,16 +1,29 @@
-import os
+import logging
+import uuid
 from contextlib import asynccontextmanager
 
 from app.models import (HealthCheckResponse, UserCreateRequest, UserResponse,
                         UserUpdateRequest)
 from db.db import (close_db_connection, create_user_in_db, delete_user_from_db,
                    get_user_from_db, init_db, update_user_in_db)
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError, OperationalError
+from starlette.middleware.base import BaseHTTPMiddleware
 
-PG_DSN = os.getenv("PG_DSN")
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler("logs/user_service.txt",
+                            mode="a"),  # write to file
+        logging.StreamHandler()  # also show in console
+    ]
+)
 
-
-# TODO: Add logging
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -20,6 +33,68 @@ async def lifespan(app: FastAPI):
     close_db_connection()
 
 app = FastAPI(lifespan=lifespan)
+
+# Middleware for request ID
+
+
+class RequestIDMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        request.state.request_id = str(uuid.uuid4())
+        response = await call_next(request)
+        return response
+
+
+app.add_middleware(RequestIDMiddleware)
+
+# Global exception handlers
+
+
+@app.exception_handler(IntegrityError)
+async def integrity_error_handler(request: Request, e: IntegrityError):
+    request_id = getattr(request.state, "request_id", "unknown")
+    logger.warning(f"Integrity Error [{request_id}]: {e}")
+    return JSONResponse(
+        status_code=409,
+        content={"detail": "Duplicate username or email",
+                 "request_id": request_id}
+    )
+
+
+@app.exception_handler(OperationalError)
+async def operational_error_handler(request: Request, e: OperationalError):
+    request_id = getattr(request.state, "request_id", "unknown")
+    logger.error(f"Operational Error [{request_id}]: {e}")
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Database connection error",
+                 "request_id": request_id}
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request: Request, e: RequestValidationError):
+    request_id = getattr(request.state, "request_id", "unknown")
+
+    errors = e.errors()
+    if errors:
+        first_error_msg = errors[0].get("msg", "Unknown validation error")
+        logger.warning(f"Validation Error [{request_id}]: {first_error_msg}")
+    else:
+        logger.warning(
+            f"Validation Error [{request_id}]: No details available")
+
+    return JSONResponse(
+        status_code=400,
+        content={
+            "detail": [
+                {
+                    "loc": err["loc"],
+                    "msg": err["msg"],
+                    "type": err["type"]
+                } for err in e.errors()
+            ]
+        }
+    )
 
 
 @app.get("/health", response_model=HealthCheckResponse)
@@ -46,96 +121,159 @@ async def health_check():
 
 
 @app.post("/users", status_code=201, response_model=UserResponse)
-def create_user(user: UserCreateRequest):
+def create_user(user: UserCreateRequest, request: Request):
     """
-    Endpoint to create a new user.
+    Create a new user.
 
-    returns status 201 on successful creation of a user.
+    This endpoint accepts a UserCreateRequest payload, validates required fields,
+    and inserts a new user record into the database. On successful creation, it
+    returns the newly created user along with a 201 Created status code.
+
+    Raises:
+        HTTPException (400): If one or more required fields are missing or invalid.
+        HTTPException (500): If an unexpected error occurs during user creation.
+
+    Returns:
+        UserResponse: The newly created user's information.
     """
-    # Input validation
+    request_id = request.state.request_id
+
+    logger.info(f"CREATE USER [{request_id}]: request received")
+
+    if not user.first_name:
+        logger.warning(f"CREATE USER [{request_id}]: Missing first name")
+        raise HTTPException(status_code=400, detail="Missing first name")
+
+    if not user.last_name:
+        logger.warning(f"CREATE USER [{request_id}]: Missing last name")
+        raise HTTPException(status_code=400, detail="Missing last name")
+
     if not user.status or user.status not in ['Official', 'Non-Official']:
+        logger.warning(
+            f"CREATE USER [{request_id}]: Invalid or missing status")
         raise HTTPException(
             status_code=400, detail="Missing or invalid user status")
-    if not user.first_name:
-        raise HTTPException(status_code=400, detail="Missing first name")
-    if not user.last_name:
-        raise HTTPException(status_code=400, detail="Missing last name")
+
     if not user.username:
+        logger.warning(f"CREATE USER [{request_id}]: Missing username")
         raise HTTPException(status_code=400, detail="Missing username")
+
     if not user.email:
+        logger.warning(f"CREATE USER [{request_id}]: Missing email")
         raise HTTPException(status_code=400, detail="Missing email")
 
-    # Add user to database
-    try:
-        # TODO: Implement create_user_in_db function
-        new_user = create_user_in_db(user)
+    logger.info(f"CREATE USER [{request_id}]: Adding user to DB")
+    new_user = create_user_in_db(user)
 
-        if not new_user:
-            raise HTTPException(
-                status_code=500, detail="Failed to create user")
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error while creating user: {e}")
+    logger.info(
+        f"CREATE USER [{request_id}]: User created with ID {new_user.id}")
 
     return new_user
 
 
 @app.get("/users/{user_id}", response_model=UserResponse)
-def get_user(user_id: str):
+def get_user(user_id: str, request: Request):
     """
-    Endpoint to get user details by user ID.
+    Retrieve a user's details by their user ID.
 
-    returns status 200 on successful retrieval of user details.
+    This endpoint looks up and returns a user's information based on the
+    provided `user_id`. If the user exists, their details are returned with
+    a 200 OK status. If no matching user is found, a 404 Not Found error
+    is raised.
+
+    Args:
+        user_id (str): The unique identifier of the user to retrieve.
+
+    Raises:
+        HTTPException (404): If no user exists with the given `user_id`.
+        HTTPException (500): If an unexpected error occurs during retrieval.
+
+    Returns:
+        UserResponse: The user's information if found.
     """
-    try:
-        # TODO: Implement get_user_from_db function
-        user = get_user_from_db(user_id)
+    request_id = request.state.request_id
 
-        if not user:
-            raise HTTPException(
-                status_code=404, detail=f"No user found with ID: {user_id}")
-    except Exception as e:
+    logger.info(f"GET USER [{request_id}]: Retrieving user with ID {user_id}")
+    user = get_user_from_db(user_id)
+
+    if not user:
+        logger.warning(
+            f"GET USER [{request_id}]: No user found with ID {user_id}")
         raise HTTPException(
-            status_code=500, detail=f"Error while retrieving user: {e}")
+            status_code=404, detail=f"No user found with ID: {user_id}")
 
+    logger.info(
+        f"GET USER [{request_id}]: User with ID {user_id} successfully retrieved")
     return user
 
 
 @app.put("/users/{user_id}", response_model=UserResponse)
-def update_user(user_id: str, user_update: UserUpdateRequest):
+def update_user(user_id: str, user_update: UserUpdateRequest, request: Request):
     """
-    Endpoint to update user details by user ID.
+    Update an existing user's details.
 
-    returns status 200 on successful update of user details.
+    This endpoint applies the fields provided in the `UserUpdateRequest` payload
+    to the user identified by `user_id`. Only the supplied fields are updated.
+    If the user exists, the updated user data is returned with a 200 OK status.
+    If no matching user is found, a 404 Not Found error is raised.
+
+    Args:
+        user_id (str): The unique identifier of the user to update.
+        user_update (UserUpdateRequest): The set of fields to modify for the user.
+
+    Raises:
+        HTTPException (404): If no user exists with the given `user_id`.
+        HTTPException (400): If provided update data is invalid.
+        HTTPException (500): If an unexpected error occurs during the update.
+
+    Returns:
+        UserResponse: The user's updated information.
     """
-    try:
-        # TODO: Implement update_user_in_db function
-        updated_user = update_user_in_db(user_id, user_update)
+    request_id = request.state.request_id
 
-        if not updated_user:
-            raise HTTPException(
-                status_code=404, detail=f"No user found with ID: {user_id}")
-    except Exception as e:
+    logger.info(f"UPDATE USER [{request_id}]: Updating user with ID {user_id}")
+    updated_user = update_user_in_db(user_id, user_update)
+
+    if not updated_user:
+        logger.warning(
+            f"UPDATE USER [{request_id}]: No user found with ID {user_id}")
         raise HTTPException(
-            status_code=500, detail=f"Error while updating user: {e}")
+            status_code=404, detail=f"No user found with ID: {user_id}")
 
+    logger.info(
+        f"UPDATE USER [{request_id}]: User with ID {user_id} successfully updated")
     return updated_user
 
 
 @app.delete("/users/{user_id}", status_code=204)
-def delete_user(user_id: str):
+def delete_user(user_id: str, request: Request):
     """
-    Endpoint to delete a user by user ID.
+    Delete a user by their user ID.
 
-    returns status 204 on successful deletion of the user.
+    This endpoint removes the user identified by `user_id` from the database.
+    On successful deletion, it returns a 204 No Content status. If no user
+    exists with the given ID, a 404 Not Found error is raised.
+
+    Args:
+        user_id (str): The unique identifier of the user to delete.
+
+    Raises:
+        HTTPException (404): If no user exists with the given `user_id`.
+        HTTPException (500): If an unexpected error occurs during deletion.
+
+    Returns:
+        None: The response has no content on successful deletion.
     """
-    try:
-        # TODO: Implement delete_user_from_db function
-        deleted = delete_user_from_db(user_id)
+    request_id = request.state.request_id
 
-        if not deleted:
-            raise HTTPException(
-                status_code=404, detail=f"No user found with ID: {user_id}")
-    except Exception as e:
+    logger.info(f"DELETE USER [{request_id}]: Deleting user with ID {user_id}")
+    deleted = delete_user_from_db(user_id)
+
+    if not deleted:
+        logger.warning(
+            f"DELETE USER [{request_id}]: No user found with ID {user_id}")
         raise HTTPException(
-            status_code=500, detail=f"Error while deleting user: {e}")
+            status_code=404, detail=f"No user found with ID: {user_id}")
+
+    logger.info(
+        f"DELETE USER [{request_id}]: User with ID {user_id} successfully deleted")
