@@ -55,8 +55,7 @@ async def integrity_error_handler(request: Request, e: IntegrityError):
     logger.warning(f"Integrity Error [{request_id}]: {e}")
     return JSONResponse(
         status_code=409,
-        content={"detail": "Duplicate username or email",
-                 "request_id": request_id}
+        content={"detail": "Duplicate username or email"}
     )
 
 
@@ -66,8 +65,7 @@ async def operational_error_handler(request: Request, e: OperationalError):
     logger.error(f"Operational Error [{request_id}]: {e}")
     return JSONResponse(
         status_code=503,
-        content={"detail": "Database connection error",
-                 "request_id": request_id}
+        content={"detail": "Database connection error"}
     )
 
 
@@ -77,8 +75,9 @@ async def validation_error_handler(request: Request, e: RequestValidationError):
 
     errors = e.errors()
     if errors:
-        first_error_msg = errors[0].get("msg", "Unknown validation error")
-        logger.warning(f"Validation Error [{request_id}]: {first_error_msg}")
+        for i in range(0, len(errors)):
+            logger.warning(
+                f"Validation Error [{request_id}]: {errors[i].get('msg', 'Unknown validation error')}")
     else:
         logger.warning(
             f"Validation Error [{request_id}]: No details available")
