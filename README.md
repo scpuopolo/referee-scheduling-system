@@ -76,6 +76,120 @@ Find the full System Architecture Document [here](./SYSTEM_ARCHITECTURE.md).
     }
     ```
 
+- `POST /users` $\rightarrow$ create a new user
+
+    **Example Request:** `POST http://localhost:8001/users`
+
+    **Request Body**
+    ```json
+    {
+        "status": "Official",
+        "first_name": "fname",
+        "last_name": "lname",
+        "username": "example",
+        "email": "fname@example.com"
+    }
+    ```
+
+    **Success Response (HTTP 201)**
+    ```json
+    {
+        "id": "generated-uuid",
+        "status": "Official",
+        "first_name": "fname",
+        "last_name": "lname",
+        "username": "example",
+        "email": "fname@example.com",
+        "created_at": "2025-01-01T12:00:00",
+        "updated_at": "2025-01-01T12:00:00"
+    }
+    ```
+
+    **Error Responses**
+    - HTTP 400 - Missing or invalid fields
+        ```json
+        { "detail": "Missing first name" }
+        ```
+    - HTTP 409 - Duplicate username/email
+        ```json
+        { "detail": "Duplicate username or email"}
+        ```
+    - HTTP 503 - Database connection issues
+        ```json
+        { "detail": "Database connection error" }
+        ```
+    
+- `GET /users/{user_id}` $\rightarrow$ Retrieve user by ID
+
+    **Example Request:** `GET http://localhost:8001/users/28c45e98-f2f9-4f5d-a981-68c0e1cb4a91`
+
+    **Success Response (HTTP 200)**
+    ```json
+    {
+        "id": "28c45e98-f2f9-4f5d-a981-68c0e1cb4a91",
+        "status": "Official",
+        "first_name": "fname",
+        "last_name": "lname",
+        "username": "example",
+        "email": "fname@example.com",
+        "created_at": "2025-01-01T12:00:00",
+        "updated_at": "2025-01-01T12:00:00"
+    }
+    ```
+
+    **Error Response (HTTP 404)**
+    ```json
+    { "detail": "No user found with ID: 28c45e98-f2f9-4f5d-a981-68c0e1cb4a91" }
+    ```
+
+- `PUT /users/{user_id}` $\rightarrow$ Update user details
+    
+    **Example Request:** `PUT http://localhost:8001/users/28c45e98-f2f9-4f5d-a981-68c0e1cb4a91`
+
+    **Request Body (partial fields allowed)**
+    ```json
+    {
+        "first_name": "fname_2",
+        "last_name": "lname_2"
+    }
+    ```
+
+    **Success Response (HTTP 200)**
+    ```json
+    {
+        "id": "28c45e98-f2f9-4f5d-a981-68c0e1cb4a91",
+        "status": "Official",
+        "first_name": "fname_2",
+        "last_name": "lname_2",
+        "username": "example",
+        "email": "fname@example.com",
+        "created_at": "2025-01-01T12:00:00",
+        "updated_at": "2025-01-01T12:00:00"
+    }
+    ```
+
+    **Error Response (HTTP 404)**
+    ```json
+    {
+        "detail": "No user found with ID: 28c45e98-f2f9-4f5d-a981-68c0e1cb4a91"
+    }
+    ```
+
+- `DELETE /users/{uder_id}` $\rightarrow$ Delete a user by ID
+
+    **Example Request:** `DELETE http://localhost:8001/users/28c45e98-f2f9-4f5d-a981-68c0e1cb4a91`
+
+    **Success Response (HTTP 204)**
+
+    *No content returned*
+
+    **Error Response (HTTP 404)**
+    ```json
+    {
+        "detail": "No user found with ID: 28c45e98-f2f9-4f5d-a981-68c0e1cb4a91"
+    }
+    ```
+
 ### Game Service
 - `GET /health` $\rightarrow$ liveness check
 
