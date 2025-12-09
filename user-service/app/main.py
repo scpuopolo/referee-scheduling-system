@@ -17,7 +17,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
-        logging.FileHandler("logs/user_service.txt",
+        logging.FileHandler("app/logs/user_service.txt",
                             mode="a"),  # write to file
         logging.StreamHandler()  # also show in console
     ]
