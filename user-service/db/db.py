@@ -1,6 +1,7 @@
 import os
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from typing import List
 from uuid import uuid4
 
 from app.models import UserCreateRequest, UserUpdateRequest
@@ -63,11 +64,25 @@ def create_user_in_db(user: UserCreateRequest) -> UserModel:
         return new_user
 
 
-def get_user_from_db(user_id: str) -> UserModel | None:
-    """Retrieve a user from the database by user ID."""
+def get_user_from_db(properties: dict) -> List[UserModel] | None:
+    """Retrieve all users from the database by user properties."""
     with get_session() as session:
-        statement = select(UserModel).where(UserModel.id == user_id)
-        return session.exec(statement).first()
+        statement = select(UserModel)
+        filters = []
+
+        if user_id := properties.get('id'):
+            filters.append(UserModel.id == user_id)
+        if status := properties.get('status'):
+            filters.append(UserModel.status == status)
+        if username := properties.get('username'):
+            filters.append(UserModel.username == username)
+        if email := properties.get('email'):
+            filters.append(UserModel.email == email)
+
+        if filters:
+            statement = statement.where(*filters)
+
+        return session.exec(statement).all()
 
 
 def update_user_in_db(user_id: str, user_update: UserUpdateRequest) -> UserModel | None:

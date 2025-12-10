@@ -1,14 +1,16 @@
 import logging
 import uuid
 from contextlib import asynccontextmanager
+from typing import List, Optional
 
 from app.models import (HealthCheckResponse, UserCreateRequest, UserResponse,
-                        UserUpdateRequest)
+                        UserStatus, UserUpdateRequest)
 from db.db import (close_db_connection, create_user_in_db, delete_user_from_db,
                    get_user_from_db, init_db, update_user_in_db)
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pydantic import EmailStr
 from sqlalchemy.exc import IntegrityError, OperationalError
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -139,11 +141,11 @@ def create_user(user: UserCreateRequest, request: Request):
 
     logger.info(f"CREATE USER [{request_id}]: request received")
 
-    if not user.first_name:
+    if not user.first_name or user.first_name.strip() == "":
         logger.warning(f"CREATE USER [{request_id}]: Missing first name")
         raise HTTPException(status_code=400, detail="Missing first name")
 
-    if not user.last_name:
+    if not user.last_name or user.last_name.strip() == "":
         logger.warning(f"CREATE USER [{request_id}]: Missing last name")
         raise HTTPException(status_code=400, detail="Missing last name")
 
@@ -153,11 +155,11 @@ def create_user(user: UserCreateRequest, request: Request):
         raise HTTPException(
             status_code=400, detail="Missing or invalid user status")
 
-    if not user.username:
+    if not user.username or user.username.strip() == "":
         logger.warning(f"CREATE USER [{request_id}]: Missing username")
         raise HTTPException(status_code=400, detail="Missing username")
 
-    if not user.email:
+    if not user.email or user.email.strip() == "":
         logger.warning(f"CREATE USER [{request_id}]: Missing email")
         raise HTTPException(status_code=400, detail="Missing email")
 
@@ -170,40 +172,64 @@ def create_user(user: UserCreateRequest, request: Request):
     return new_user
 
 
-@app.get("/users/{user_id}", response_model=UserResponse)
-def get_user(user_id: str, request: Request):
+@app.get("/users", response_model=List[UserResponse])
+def get_user(request: Request,
+             user_id: Optional[str] = Query(default=None),
+             status: Optional[UserStatus] = Query(default=None),
+             username: Optional[str] = Query(
+                 default=None, min_length=1, max_length=100),
+             email: Optional[EmailStr] = Query(
+                 default=None, min_length=5, max_length=255)
+             ):
     """
-    Retrieve a user's details by their user ID.
+    Retrieve users matching optional filter criteria.
 
-    This endpoint looks up and returns a user's information based on the
-    provided `user_id`. If the user exists, their details are returned with
-    a 200 OK status. If no matching user is found, a 404 Not Found error
-    is raised.
+    This endpoint returns a list of users filtered by any combination of
+    `user_id`, `status`, `username`, or `email`. All query parameters are optional.
+    If no parameters are provided, all users may be returned.
+
+    A 404 Not Found error is raised if no users match the given filters.
 
     Args:
-        user_id (str): The unique identifier of the user to retrieve.
+        request (Request): The incoming FastAPI request object.
+        user_id (str, optional): Filter by a specific user ID.
+        status (UserStatus, optional): Filter by the user's status.
+        username (str, optional): Filter by username.
+        email (EmailStr, optional): Filter by email address.
 
     Raises:
-        HTTPException (404): If no user exists with the given `user_id`.
+        HTTPException (404): If no users match the provided filters.
         HTTPException (500): If an unexpected error occurs during retrieval.
 
     Returns:
-        UserResponse: The user's information if found.
+        List[UserResponse]: A list of users that match the filter criteria.
     """
     request_id = request.state.request_id
 
-    logger.info(f"GET USER [{request_id}]: Retrieving user with ID {user_id}")
-    user = get_user_from_db(user_id)
+    properties = {}
 
-    if not user:
-        logger.warning(
-            f"GET USER [{request_id}]: No user found with ID {user_id}")
-        raise HTTPException(
-            status_code=404, detail=f"No user found with ID: {user_id}")
+    if user_id:
+        properties['id'] = user_id
+    if status:
+        properties['status'] = status
+    if username:
+        properties['username'] = username
+    if email:
+        properties['email'] = email
 
     logger.info(
-        f"GET USER [{request_id}]: User with ID {user_id} successfully retrieved")
-    return user
+        f"GET USER [{request_id}]: Retrieving user(s) with properties {properties}")
+    users = get_user_from_db(properties)
+
+    if not users:
+        logger.warning(
+            f"GET USER [{request_id}]: No user(s) found with properties {properties}")
+        raise HTTPException(
+            status_code=404, detail=f"No user(s) found with properties: {properties}")
+
+    logger.info(
+        f"GET USER [{request_id}]: User(s) with properties {properties} successfully retrieved")
+    return users
 
 
 @app.put("/users/{user_id}", response_model=UserResponse)
