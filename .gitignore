@@ -1,5 +1,6 @@
 # Private documentation
 CODE_PROVENANCE.md
+user_service.txt
 
 # Environment variables
 .env

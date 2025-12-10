@@ -86,5 +86,6 @@ The **Referee Scheduling System** includes health monitoring logic that verifies
 | Language | Python 3.11+ | Strong async support and developer familiarity |
 | Web Server | Uvicorn | ASGI server optimized for FastAPI |
 | Data Modeling / Validation | Pydantic v2 | Automatically enforces consistency and correctness for models and schemas |
-
+| Database | Postgres 16 | Reliable, scalable relational database with strong SQL support and first-class integration across Python tooling |
+<!-- Eventually add Redis after caching implementation -->
 
