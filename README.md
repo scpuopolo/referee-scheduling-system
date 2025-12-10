@@ -119,9 +119,27 @@ Find the full System Architecture Document [here](./SYSTEM_ARCHITECTURE.md).
         { "detail": "Database connection error" }
         ```
     
-- `GET /users/{user_id}` $\rightarrow$ Retrieve user by ID
+- `GET /users/{user_id}` $\rightarrow$ Retrieve users with optional filtering
 
-    **Example Request:** `GET http://localhost:8001/users/28c45e98-f2f9-4f5d-a981-68c0e1cb4a91`
+    Retrieve users matching any combination of filter criteria.
+    All query params are optional. If non are supplied, all users may be returned.
+
+    **Query Parameters (all optional):**
+    - `user_id`: Filter by user ID
+    - `status`: Filter by user status (e.g., Official, Non-Official)
+    - `username`: Filter by username (min 1 char, max 100)
+    - `email`: Filter by email (min 5 chars, max 255)
+
+    **Example Requests:** 
+    - Get all users
+        
+        `GET http://localhost:8001/users`
+    - Filter by status:
+
+        `GET http://localhost:8001/users?status=Official`
+    - Filter by multiple fields:
+
+        `GET http://localhost:8001/users?username=example&email=fname@example.com`
 
     **Success Response (HTTP 200)**
     ```json
