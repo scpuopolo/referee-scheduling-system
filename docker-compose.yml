@@ -8,8 +8,13 @@ services:
       - "8001:8000"
     environment:
       - PG_USER_DSN=${PG_USER_DSN}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - TTL_SECONDS=${TTL_SECONDS}
     depends_on:
       user-postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -128,6 +133,20 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+  redis:
+    image: redis:7-alpine
+    command: [ "redis-server", "--appendonly", "yes" ]
+    container_name: redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    networks:
+      - scheduling-network
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 2s
+      retries: 10
 
 volumes:
   pgdata-user:
