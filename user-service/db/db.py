@@ -8,7 +8,7 @@ from app.models import UserCreateRequest, UserUpdateRequest
 from sqlmodel import Field, Session, SQLModel, create_engine, delete, select
 
 # Load the Postgres DSN (connection string) from environment variables
-PG_DSN = os.getenv("PG_DSN")
+PG_DSN = os.getenv("PG_USER_DSN")
 
 # Create the SQLAlchemy engine that connects to the database
 engine = create_engine(PG_DSN)
@@ -64,7 +64,7 @@ def create_user_in_db(user: UserCreateRequest) -> UserModel:
         return new_user
 
 
-def get_user_from_db(properties: dict) -> List[UserModel] | None:
+def get_users_from_db(properties: dict) -> List[UserModel] | None:
     """Retrieve all users from the database by user properties."""
     with get_session() as session:
         statement = select(UserModel)
