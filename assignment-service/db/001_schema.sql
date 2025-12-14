@@ -1,0 +1,8 @@
+-- Schema for Assignment Service
+CREATE TABLE IF NOT EXISTS assignments (
+    id CHAR(36) PRIMARY KEY,
+    game_id CHAR(36) UNIQUE NOT NULL,
+    referees JSONB,
+    assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);

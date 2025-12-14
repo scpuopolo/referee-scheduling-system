@@ -2,6 +2,7 @@
 CODE_PROVENANCE.md
 user_service.txt
 game_service.txt
+assignment_service.txt
 
 # Environment variables
 .env

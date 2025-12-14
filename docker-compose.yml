@@ -55,10 +55,13 @@ services:
     environment:
       - USER_SERVICE_BASE=http://user-service:8000
       - GAME_SERVICE_BASE=http://game-service:8000
+      - PG_ASSIGNMENT_DSN=${PG_ASSIGNMENT_DSN}
     depends_on:
       user-service:
         condition: service_healthy
       game-service:
+        condition: service_healthy
+      assignment-postgres:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -67,6 +70,10 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    volumes:
+      - ./assignment-service:/app
+    networks:
+      - scheduling-network
   user-postgres:
     image: postgres:16-alpine
     container_name: user-postgres
@@ -103,10 +110,29 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+  assignment-postgres:
+    image: postgres:16-alpine
+    container_name: assignment-postgres
+    environment:
+      POSTGRES_DB: ${ASSIGNMENT_POSTGRES_DB}
+      POSTGRES_USER: ${ASSIGNMENT_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${ASSIGNMENT_POSTGRES_PASSWORD}
+    ports:
+      - "5434:5432"
+    volumes:
+      - pgdata-assignment:/var/lib/postgresql/assignment-data
+    networks:
+      - scheduling-network
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "${ASSIGNMENT_POSTGRES_USER}", "-d", "${ASSIGNMENT_POSTGRES_DB}" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
 volumes:
   pgdata-user:
   pgdata-game:
+  pgdata-assignment:
 
 
 networks:
