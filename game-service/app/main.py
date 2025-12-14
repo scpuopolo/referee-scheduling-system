@@ -1,10 +1,16 @@
 import logging
 import uuid
+from contextlib import asynccontextmanager
 from typing import List, Optional
 
 from app.models import (CardInfo, CompletedGameInfo, GameCreateRequest,
                         GameResponse, GameUpdateRequest, HealthCheckResponse)
+from db.db import (close_db_connection, create_game_in_db, delete_game_from_db,
+                   get_games_from_db, init_db, update_game_in_db)
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError, OperationalError
 from starlette.middleware.base import BaseHTTPMiddleware
 
 # Configure logging
@@ -19,7 +25,14 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+    close_db_connection()
+
+app = FastAPI(lifespan=lifespan)
 
 # Middleware for request ID
 
@@ -32,6 +45,55 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(RequestIDMiddleware)
+
+# Global exception handlers
+
+
+@app.exception_handler(IntegrityError)
+async def integrity_error_handler(request: Request, e: IntegrityError):
+    request_id = getattr(request.state, "request_id", "unknown")
+    logger.warning(f"Integrity Error [{request_id}]: {e}")
+    return JSONResponse(
+        status_code=409,
+        content={"detail": "Duplicate username or email"}
+    )
+
+
+@app.exception_handler(OperationalError)
+async def operational_error_handler(request: Request, e: OperationalError):
+    request_id = getattr(request.state, "request_id", "unknown")
+    logger.error(f"Operational Error [{request_id}]: {e}")
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Database connection error"}
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request: Request, e: RequestValidationError):
+    request_id = getattr(request.state, "request_id", "unknown")
+
+    errors = e.errors()
+    if errors:
+        for i in range(0, len(errors)):
+            logger.warning(
+                f"Validation Error [{request_id}]: {errors[i].get('msg', 'Unknown validation error')}")
+    else:
+        logger.warning(
+            f"Validation Error [{request_id}]: No details available")
+
+    return JSONResponse(
+        status_code=400,
+        content={
+            "detail": [
+                {
+                    "loc": err["loc"] if "loc" in err else "",
+                    "msg": err["msg"] if "msg" in err else "",
+                    "type": err["type"] if "type" in err else ""
+                } for err in e.errors()
+            ]
+        }
+    )
 
 
 @app.get("/health", response_model=HealthCheckResponse)
