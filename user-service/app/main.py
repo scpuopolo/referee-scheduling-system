@@ -1,8 +1,11 @@
+import json
 import logging
+import os
 import uuid
 from contextlib import asynccontextmanager
 from typing import List, Optional
 
+import redis
 from app.models import (HealthCheckResponse, UserCreateRequest, UserResponse,
                         UserStatus, UserUpdateRequest)
 from db.db import (close_db_connection, create_user_in_db, delete_user_from_db,
@@ -13,6 +16,11 @@ from fastapi.responses import JSONResponse
 from pydantic import EmailStr
 from sqlalchemy.exc import IntegrityError, OperationalError
 from starlette.middleware.base import BaseHTTPMiddleware
+
+# Import environment variables
+REDIS_HOST = os.getenv("REDIS_HOST")
+REDIS_PORT = int(os.getenv("REDIS_PORT"))
+TTL_SECONDS = int(os.getenv("TTL_SECONDS"))
 
 # Configure logging
 logging.basicConfig(
@@ -26,6 +34,13 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+# Redis connection
+redis_client = redis.Redis(
+    host=REDIS_HOST,
+    port=REDIS_PORT,
+    decode_responses=True
+)
 
 
 @asynccontextmanager
@@ -166,6 +181,21 @@ async def create_user(user: UserCreateRequest, request: Request):
     logger.info(f"CREATE USER [{request_id}]: Adding user to DB")
     new_user = create_user_in_db(user)
 
+    # Redis caching
+    logger.info(f"CREATE USER [{request_id}]: Caching user data in Redis")
+    try:
+        cached = redis_client.setex(f"user:{new_user.id}",
+                                    TTL_SECONDS, new_user.model_dump_json())
+        if not cached:
+            logger.warning(
+                f"CREATE USER [{request_id}]: Failed to cache user data in Redis for user ID {new_user.id}")
+        else:
+            logger.info(
+                f"CREATE USER [{request_id}]: User data cached in Redis for user ID {new_user.id}")
+    except redis.RedisError as e:
+        logger.error(
+            f"CREATE USER [{request_id}]: Error caching user data in Redis for user ID {new_user.id}: {e}")
+
     logger.info(
         f"CREATE USER [{request_id}]: User created with ID {new_user.id}")
 
@@ -206,6 +236,25 @@ async def get_user(request: Request,
     """
     request_id = request.state.request_id
 
+    logger.info(f"GET USER [{request_id}]: request received")
+
+    # Check Redis cache if filtering by user_id only
+    if user_id and not (status or username or email):
+        logger.info(
+            f"GET USER [{request_id}]: Checking Redis cache for user ID {user_id}")
+        try:
+            cached_user = redis_client.get(f"user:{user_id}")
+            if cached_user:
+                logger.info(
+                    f"GET USER [{request_id}]: CACHE HIT - Retrieved user ID {user_id} from Redis cache")
+                return [UserResponse.model_validate(json.loads(cached_user))]
+            else:
+                logger.info(
+                    f"GET USER [{request_id}]: CACHE MISS - User ID {user_id} not found in Redis cache")
+        except redis.RedisError as e:
+            logger.error(
+                f"GET USER [{request_id}]: Error accessing Redis cache for user ID {user_id}: {e}")
+
     properties = {}
 
     if user_id:
@@ -229,6 +278,26 @@ async def get_user(request: Request,
 
     logger.info(
         f"GET USER [{request_id}]: User(s) with properties {properties} successfully retrieved")
+
+    # Potential to enable Redis caching for multiple users
+    """ # Update Redis cache
+    if len(users) <= 100:
+        logger.info(
+            f"GET USER [{request_id}]: Updating Redis cache for retrieved users")
+        for user in users:
+            try:
+                cached = redis_client.setex(f"user:{user.id}",
+                                            TTL_SECONDS, user.model_dump_json())
+                if not cached:
+                    logger.warning(
+                        f"GET USER [{request_id}]: Failed to update Redis cache for user ID {user.id}")
+                else:
+                    logger.info(
+                        f"GET USER [{request_id}]: Redis cache updated for user ID {user.id}")
+            except redis.RedisError as e:
+                logger.error(
+                    f"GET USER [{request_id}]: Error updating Redis cache for user ID {user.id}: {e}") """
+
     return users
 
 
@@ -265,6 +334,22 @@ async def update_user(user_id: str, user_update: UserUpdateRequest, request: Req
         raise HTTPException(
             status_code=404, detail=f"No user found with ID: {user_id}")
 
+    # Update Redis cache
+    logger.info(
+        f"UPDATE USER [{request_id}]: Updating Redis cache for user ID {user_id}")
+    try:
+        cached = redis_client.setex(f"user:{updated_user.id}",
+                                    TTL_SECONDS, updated_user.model_dump_json())
+        if not cached:
+            logger.warning(
+                f"UPDATE USER [{request_id}]: Failed to update Redis cache for user ID {user_id}")
+        else:
+            logger.info(
+                f"UPDATE USER [{request_id}]: Redis cache updated for user ID {user_id}")
+    except redis.RedisError as e:
+        logger.error(
+            f"UPDATE USER [{request_id}]: Error updating Redis cache for user ID {user_id}: {e}")
+
     logger.info(
         f"UPDATE USER [{request_id}]: User with ID {user_id} successfully updated")
     return updated_user
@@ -299,6 +384,15 @@ async def delete_user(user_id: str, request: Request):
             f"DELETE USER [{request_id}]: No user found with ID {user_id}")
         raise HTTPException(
             status_code=404, detail=f"No user found with ID: {user_id}")
+
+    # Remove from Redis cache
+    logger.info(
+        f"DELETE USER [{request_id}]: Removing user ID {user_id} from Redis cache")
+    try:
+        redis_client.delete(f"user:{user_id}")
+    except redis.RedisError as e:
+        logger.error(
+            f"DELETE USER [{request_id}]: Error removing user ID {user_id} from Redis cache: {e}")
 
     logger.info(
         f"DELETE USER [{request_id}]: User with ID {user_id} successfully deleted")

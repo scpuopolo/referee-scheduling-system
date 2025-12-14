@@ -17,8 +17,6 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError, OperationalError
 from starlette.middleware.base import BaseHTTPMiddleware
 
-# TODO: Add redis caching
-
 # External service bases
 USER_SERVICE_BASE = os.getenv("USER_SERVICE_BASE", "http://user-service:8000")
 GAME_SERVICE_BASE = os.getenv("GAME_SERVICE_BASE", "http://game-service:8000")
@@ -33,6 +31,8 @@ logging.basicConfig(
     ]
 )
 
+logging.getLogger("httpx").setLevel(
+    logging.WARNING)  # Reduce httpx logging noise
 logger = logging.getLogger(__name__)
 
 
