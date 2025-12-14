@@ -122,7 +122,7 @@ async def health_check():
 
 
 @app.post("/users", status_code=201, response_model=UserResponse)
-def create_user(user: UserCreateRequest, request: Request):
+async def create_user(user: UserCreateRequest, request: Request):
     """
     Create a new user.
 
@@ -173,14 +173,14 @@ def create_user(user: UserCreateRequest, request: Request):
 
 
 @app.get("/users", response_model=List[UserResponse])
-def get_user(request: Request,
-             user_id: Optional[str] = Query(default=None),
-             status: Optional[UserStatus] = Query(default=None),
-             username: Optional[str] = Query(
-                 default=None, min_length=1, max_length=100),
-             email: Optional[EmailStr] = Query(
-                 default=None, min_length=5, max_length=255)
-             ):
+async def get_user(request: Request,
+                   user_id: Optional[str] = Query(default=None),
+                   status: Optional[UserStatus] = Query(default=None),
+                   username: Optional[str] = Query(
+                       default=None, min_length=1, max_length=100),
+                   email: Optional[EmailStr] = Query(
+                       default=None, min_length=5, max_length=255)
+                   ):
     """
     Retrieve users matching optional filter criteria.
 
@@ -233,7 +233,7 @@ def get_user(request: Request,
 
 
 @app.put("/users/{user_id}", response_model=UserResponse)
-def update_user(user_id: str, user_update: UserUpdateRequest, request: Request):
+async def update_user(user_id: str, user_update: UserUpdateRequest, request: Request):
     """
     Update an existing user's details.
 
@@ -271,7 +271,7 @@ def update_user(user_id: str, user_update: UserUpdateRequest, request: Request):
 
 
 @app.delete("/users/{user_id}", status_code=204)
-def delete_user(user_id: str, request: Request):
+async def delete_user(user_id: str, request: Request):
     """
     Delete a user by their user ID.
 
