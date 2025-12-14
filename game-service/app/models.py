@@ -20,13 +20,6 @@ class CompletedGameInfo(BaseModel):
     away_team_score: Optional[int] = Field(None, ge=0, le=99)
     cards_issued: List[CardInfo] = []
 
-    """@model_validator(mode="after")
-    def validate_scores(self):
-        if (self.home_team_score is None) != (self.away_team_score is None):
-            raise RequestValidationError(errors=[
-                                         {'msg': "Both home_team_score and away_team_score must be provided together."}])
-        return self"""
-
 
 class HealthCheckResponse(BaseModel):
     service: str = 'game-service'
@@ -77,10 +70,3 @@ class GameUpdateRequest(BaseModel):
 
     class Config:
         str_strip_whitespace = True
-
-    """@model_validator(mode="after")
-    def validate_result(self):
-        if not self.game_completed and self.result is not None:
-            raise RequestValidationError(
-                errors=[{"msg": "Only completed games can have result."}])
-        return self"""
