@@ -119,10 +119,10 @@ Find the full System Architecture Document [here](./SYSTEM_ARCHITECTURE.md).
         { "detail": "Database connection error" }
         ```
     
-- `GET /users/{user_id}` $\rightarrow$ Retrieve users with optional filtering
+- `GET /users` $\rightarrow$ Retrieve users with optional filtering
 
     Retrieve users matching any combination of filter criteria.
-    All query params are optional. If non are supplied, all users may be returned.
+    All query params are optional. If none are supplied, all users may be returned.
 
     **Query Parameters (all optional):**
     - `user_id`: Filter by user ID
@@ -143,16 +143,18 @@ Find the full System Architecture Document [here](./SYSTEM_ARCHITECTURE.md).
 
     **Success Response (HTTP 200)**
     ```json
-    {
-        "id": "28c45e98-f2f9-4f5d-a981-68c0e1cb4a91",
-        "status": "Official",
-        "first_name": "fname",
-        "last_name": "lname",
-        "username": "example",
-        "email": "fname@example.com",
-        "created_at": "2025-01-01T12:00:00",
-        "updated_at": "2025-01-01T12:00:00"
-    }
+    [
+        {
+            "id": "28c45e98-f2f9-4f5d-a981-68c0e1cb4a91",
+            "status": "Official",
+            "first_name": "fname",
+            "last_name": "lname",
+            "username": "example",
+            "email": "fname@example.com",
+            "created_at": "2025-01-01T12:00:00",
+            "updated_at": "2025-01-01T12:00:00"
+        }
+    ]
     ```
 
     **Error Response (HTTP 404)**
@@ -193,7 +195,7 @@ Find the full System Architecture Document [here](./SYSTEM_ARCHITECTURE.md).
     }
     ```
 
-- `DELETE /users/{uder_id}` $\rightarrow$ Delete a user by ID
+- `DELETE /users/{user_id}` $\rightarrow$ Delete a user by ID
 
     **Example Request:** `DELETE http://localhost:8001/users/28c45e98-f2f9-4f5d-a981-68c0e1cb4a91`
 
@@ -219,6 +221,155 @@ Find the full System Architecture Document [here](./SYSTEM_ARCHITECTURE.md).
         "service": "game-service",
         "status": "healthy",
         "dependencies": null
+    }
+    ```
+
+- `POST /games` $\rightarrow$ create a new game
+
+    **Example Request:** `POST http://localhost:8002/games`
+
+    **Request Body**
+    ```json
+    {
+        "league": "Recreation Town Soccer",
+        "venue": "Main Field",
+        "home_team": "Tigers",
+        "away_team": "Lions",
+        "level": "U18 Boys",
+        "halves_length_minutes": 45,
+        "scheduled_time": "2025-03-01T14:00:00"
+    }
+    ```
+
+    **Success Response (HTTP 201)**
+    ```json
+    {
+        "id": "generated-uuid",
+        "league": "Recreation Town Soccer",
+        "venue": "Main Field",
+        "home_team": "Tigers",
+        "away_team": "Lions",
+        "level": "U18 Boys",
+        "halves_length_minutes": 45,
+        "game_completed": false,
+        "result": null,
+        "scheduled_time": "2025-03-01T14:00:00",
+        "created_at": "2025-01-01T12:00:00",
+        "updated_at": "2025-01-01T12:00:00"
+    }
+    ```
+
+    **Error Responses**
+    - HTTP 400 - Missing or invalid fields
+        ```json
+        { "detail": "Missing league" }
+        ```
+    - HTTP 503 - Database connection issues
+        ```json
+        { "detail": "Database connection error" }
+        ```
+    
+- `GET /games` $\rightarrow$ Retrieve games with optional filtering
+
+    Retrieve games matching any combination of filter criteria.
+    All query params are optional. If none are supplied, all games may be returned.
+
+    **Query Parameters (all optional):**
+    - `game_id`: Filter by game ID
+    - `league`: Filter by league name (min 1 char, max 100)
+    - `venue`: Filter by venue name (min 1 char, max 255)
+    - `home_team`: Filter by home team name (min 1 char, max 100)
+    - `away_team`: Filter by away team name (min 1 char, max 100)
+    - `level`: Filter by competition level (min 1 char, max 100)
+    - `game_completed`: Filter by completion status (true or false)
+
+    **Example Requests:** 
+    - Get all games
+        
+        `GET http://localhost:8002/games`
+    - Filter by league:
+
+        `GET http://localhost:8002/games?league=Recreation%20Town%20Soccer`
+    - Filter by multiple fields:
+
+        `GET http://localhost:8002/games?home_team=Tigers&game_completed=false`
+
+    **Success Response (HTTP 200)**
+    ```json
+    [
+        {
+            "id": "28c45e98-f2f9-4f5d-a981-68c0e1cb4a91",
+            "league": "Recreation Town Soccer",
+            "venue": "Main Field",
+            "home_team": "Tigers",
+            "away_team": "Lions",
+            "level": "U18",
+            "halves_length_minutes": 45,
+            "game_completed": false,
+            "result": null,
+            "scheduled_time": "2025-03-01T14:00:00",
+            "created_at": "2025-01-01T12:00:00",
+            "updated_at": "2025-01-01T12:00:00"
+        }
+    ]
+    ```
+
+    **Error Response (HTTP 404)**
+    ```json
+    { 
+        "detail": "No game(s) found with properties: {'league': 'Spring'}" 
+    }
+    ```
+
+- `PUT /games/{game_id}` $\rightarrow$ Update game details
+    
+    **Example Request:** `PUT http://localhost:8002/games/28c45e98-f2f9-4f5d-a981-68c0e1cb4a91`
+
+    **Request Body (partial fields allowed)**
+    ```json
+    {
+        "venue": "Secondary Field",
+        "game_completed": true
+    }
+    ```
+
+    **Success Response (HTTP 200)**
+    ```json
+    {
+        "id": "28c45e98-f2f9-4f5d-a981-68c0e1cb4a91",
+        "league": "Recreation Town Soccer",
+        "venue": "Secondary Field",
+        "home_team": "Tigers",
+        "away_team": "Lions",
+        "level": "U18 Boys",
+        "halves_length_minutes": 45,
+        "game_completed": true,
+        "result": null,
+        "scheduled_time": "2025-03-01T14:00:00",
+        "created_at": "2025-01-01T12:00:00",
+        "updated_at": "2025-01-02T09:30:00"
+    }
+    ```
+
+    **Error Response (HTTP 404)**
+    ```json
+    {
+        "detail": "No game found with ID: 28c45e98-f2f9-4f5d-a981-68c0e1cb4a91"
+    }
+    ```
+
+- `DELETE /games/{game_id}` $\rightarrow$ Delete a game by ID
+
+    **Example Request:** `DELETE http://localhost:8002/games/28c45e98-f2f9-4f5d-a981-68c0e1cb4a91`
+
+    **Success Response (HTTP 204)**
+
+    *No content returned*
+
+    **Error Response (HTTP 404)**
+    ```json
+    {
+        "detail": "No game found with ID: 28c45e98-f2f9-4f5d-a981-68c0e1cb4a91"
     }
     ```
 

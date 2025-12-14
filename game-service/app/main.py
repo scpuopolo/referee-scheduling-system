@@ -55,7 +55,7 @@ async def integrity_error_handler(request: Request, e: IntegrityError):
     logger.warning(f"Integrity Error [{request_id}]: {e}")
     return JSONResponse(
         status_code=409,
-        content={"detail": "Duplicate username or email"}
+        content={"detail": "Postgres Integrity Error"}
     )
 
 
@@ -121,6 +121,31 @@ async def health_check():
 
 @app.post("/games", status_code=201, response_model=GameResponse)
 async def create_game(game: GameCreateRequest, request: Request):
+    """
+    Create a new game.
+
+    This endpoint accepts game details and creates a new game record in the
+    database. Required fields are validated to ensure they are present and
+    non-empty. If validation fails, a 400 Bad Request error is returned.
+
+    A unique request ID is used for logging to aid in tracing and debugging.
+
+    Args:
+        game (GameCreateRequest): The request body containing the game details,
+            including league, venue, home team, away team, level, and scheduled
+            time.
+        request (Request): The incoming HTTP request, used to extract the
+            request ID for logging.
+
+    Returns:
+        GameResponse: The newly created game, including its generated ID and
+        timestamps.
+
+    Raises:
+        HTTPException: 
+            - 400 Bad Request if any required field is missing or empty.
+    """
+
     request_id = request.state.request_id
 
     logger.info(f"CREATE GAME [{request_id}]: request received")
@@ -168,6 +193,35 @@ async def get_game(request: Request,
                        default=None, min_length=1, max_length=100),
                    game_completed: Optional[bool] = Query(default=None)
                    ):
+    """
+    Retrieve games matching the provided query parameters.
+
+    This endpoint returns a list of games that match the specified filter
+    criteria. All query parameters are optional, and only the parameters
+    provided are used to filter results. If no query parameters are supplied,
+    all games are returned.
+
+    A unique request ID is used for logging to aid in tracing and debugging.
+
+    Args:
+        request (Request): The incoming HTTP request, used to extract the
+            request ID for logging.
+        game_id (Optional[str]): Filter by the unique game ID.
+        league (Optional[str]): Filter by league name.
+        venue (Optional[str]): Filter by venue name.
+        home_team (Optional[str]): Filter by home team name.
+        away_team (Optional[str]): Filter by away team name.
+        level (Optional[str]): Filter by competition level.
+        game_completed (Optional[bool]): Filter by completion status of the game.
+
+    Returns:
+        List[GameResponse]: A list of games matching the provided filters.
+
+    Raises:
+        HTTPException:
+            - 404 Not Found if no games match the provided filter criteria.
+    """
+
     request_id = request.state.request_id
 
     properties = {}
@@ -204,6 +258,30 @@ async def get_game(request: Request,
 
 @app.put("/games/{game_id}", response_model=GameResponse)
 async def update_game(game_id: str, game_update: GameUpdateRequest, request: Request):
+    """
+    Update an existing game.
+
+    This endpoint updates the fields of an existing game identified by its
+    unique game ID. Only the fields provided in the request body are updated.
+    If the specified game does not exist, a 404 Not Found error is returned.
+
+    A unique request ID is used for logging to aid in tracing and debugging.
+
+    Args:
+        game_id (str): The unique identifier of the game to update.
+        game_update (GameUpdateRequest): The request body containing the fields
+            to update for the game.
+        request (Request): The incoming HTTP request, used to extract the
+            request ID for logging.
+
+    Returns:
+        GameResponse: The updated game record.
+
+    Raises:
+        HTTPException:
+            - 404 Not Found if no game exists with the specified game ID.
+    """
+
     request_id = request.state.request_id
 
     logger.info(f"UPDATE GAME [{request_id}]: Updating game with ID {game_id}")
@@ -222,6 +300,28 @@ async def update_game(game_id: str, game_update: GameUpdateRequest, request: Req
 
 @app.delete("/games/{game_id}", status_code=204)
 async def delete_game(game_id: str, request: Request):
+    """
+    Delete an existing game.
+
+    This endpoint permanently deletes the game identified by its unique game ID.
+    If the specified game does not exist, a 404 Not Found error is returned.
+    On successful deletion, no response body is returned.
+
+    A unique request ID is used for logging to aid in tracing and debugging.
+
+    Args:
+        game_id (str): The unique identifier of the game to delete.
+        request (Request): The incoming HTTP request, used to extract the
+            request ID for logging.
+
+    Returns:
+        None
+
+    Raises:
+        HTTPException:
+            - 404 Not Found if no game exists with the specified game ID.
+    """
+
     request_id = request.state.request_id
 
     logger.info(f"DELETE GAME [{request_id}]: Deleting game with ID {game_id}")
