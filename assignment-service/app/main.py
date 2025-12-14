@@ -209,15 +209,15 @@ async def create_assignment(assignment: AssignmentCreateRequest, request: Reques
             status_code=500, detail="Error communicating with the game service")
 
     if assignment.referees:
-        # Validate referee_id exists in user service DB
+        # Validate an Official with given ID exists in user service DB
         try:
             async with httpx.AsyncClient() as client:
                 for referee in assignment.referees:
-                    response = await client.get(f"{USER_SERVICE_BASE}/users?user_id={referee.referee_id}")
+                    response = await client.get(f"{USER_SERVICE_BASE}/users?user_id={referee.referee_id}&status=Official")
 
                     if response.status_code != 200:
                         logger.warning(
-                            f"CREATE ASSIGNMENT [{request_id}]: referee_id {referee.referee_id} not found in user service")
+                            f"CREATE ASSIGNMENT [{request_id}]: Official with ID {referee.referee_id} not found in user service")
                         raise HTTPException(
                             status_code=response.status_code, detail=response.json().get("detail", "Error from user service"))
         except httpx.RequestError as e:
@@ -270,6 +270,26 @@ async def get_assignments(request: Request,
 @app.put("/assignments/{assignment_id}", response_model=AssignmentResponse)
 async def update_assignment(assignment_id: str, assignment_update: AssignmentUpdateRequest, request: Request):
     request_id = request.state.request_id
+
+    logger.info(f"UPDATE ASSIGNMENT [{request_id}]: Request received")
+
+    if assignment_update.referees:
+        # Validate Official with given ID exists in user service DB
+        try:
+            async with httpx.AsyncClient() as client:
+                for referee in assignment_update.referees:
+                    response = await client.get(f"{USER_SERVICE_BASE}/users?user_id={referee.referee_id}&status=Official")
+
+                    if response.status_code != 200:
+                        logger.warning(
+                            f"UPDATE ASSIGNMENT [{request_id}]: Official with ID {referee.referee_id} not found in user service")
+                        raise HTTPException(
+                            status_code=response.status_code, detail=response.json().get("detail", "Error from user service"))
+        except httpx.RequestError as e:
+            logger.error(
+                f"UPDATE ASSIGNMENT [{request_id}]: Error communicating with the user service: {e}")
+            raise HTTPException(
+                status_code=500, detail="Error communicating with the user service")
 
     logger.info(
         f"UPDATE ASSIGNMENT [{request_id}]: Updating assignment with ID {assignment_id}")
