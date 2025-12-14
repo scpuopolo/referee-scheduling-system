@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 HealthStatus = Literal['healthy', 'unhealthy']
 Position = Literal['Center', 'AR1', 'AR2',
@@ -30,6 +30,8 @@ class AssignmentResponse(BaseModel):
     game_id: str
     assigned_at: datetime
     updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AssignmentUpdateRequest(BaseModel):

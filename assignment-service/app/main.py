@@ -322,3 +322,86 @@ async def delete_assignment(assignment_id: str, request: Request):
             status_code=404, detail=f"No assignment found with ID {assignment_id}")
     logger.info(
         f"DELETE ASSIGNMENT [{request_id}]: Assignment with ID {assignment_id} successfully deleted")
+
+# Extra Routes
+
+
+@app.get("/assignments/full-details/{assignment_id}")
+async def get_assignments_full_details(assignment_id: str, request: Request):
+    request_id = request.state.request_id
+
+    logger.info(
+        f"GET ASSIGNMENT FULL DETAILS [{request_id}]: Retrieving full details for assignment ID {assignment_id}")
+
+    filter = {"assignment_id": assignment_id}
+
+    logger.info(
+        f"GET ASSIGNMENT FULL DETAILS [{request_id}]: Fetching assignment from DB")
+    assignment = get_assignments_from_db(filter)
+
+    if not assignment:
+        logger.warning(
+            f"GET ASSIGNMENT FULL DETAILS [{request_id}]: No assignment found with ID {assignment_id}")
+        raise HTTPException(
+            status_code=404, detail=f"No assignment found with ID {assignment_id}")
+    else:
+        assignment = AssignmentResponse.model_validate(assignment[0])
+
+    logger.info(
+        f"GET ASSIGNMENT FULL DETAILS [{request_id}]: Successfully retrieved assignment details")
+
+    # Fetch game details from game service
+    logger.info(
+        f"GET ASSIGNMENT FULL DETAILS [{request_id}]: Fetching game details for game_id {assignment.game_id} from game service")
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{GAME_SERVICE_BASE}/games?game_id={assignment.game_id}")
+            if response.status_code != 200:
+                logger.warning(
+                    f"GET ASSIGNMENT FULL DETAILS [{request_id}]: game_id {assignment.game_id} not found in game service")
+                raise HTTPException(status_code=response.status_code, detail=response.json().get(
+                    "detail", "Error from game service"))
+
+            game_details = response.json()[0]
+    except httpx.RequestError as e:
+        logger.error(
+            f"GET ASSIGNMENT FULL DETAILS [{request_id}]: Error communicating with the game service: {e}")
+        raise HTTPException(
+            status_code=500, detail="Error communicating with the game service")
+
+    if assignment.referees:
+        # Fetch referee details from user service
+        logger.info(
+            f"GET ASSIGNMENT FULL DETAILS [{request_id}]: Fetching referee details from user service")
+
+        referee_details = []
+        try:
+            async with httpx.AsyncClient() as client:
+                for referee in assignment.referees:
+                    response = await client.get(f"{USER_SERVICE_BASE}/users?user_id={referee.referee_id}")
+
+                    if response.status_code != 200:
+                        logger.warning(
+                            f"GET ASSIGNMENT FULL DETAILS [{request_id}]: Official with ID {referee.referee_id} not found in user service")
+                        raise HTTPException(
+                            status_code=response.status_code, detail=response.json().get("detail", "Error from user service"))
+                    ref_data = response.json()[0]
+                    ref_data['position'] = referee.position
+                    referee_details.append(ref_data)
+        except httpx.RequestError as e:
+            logger.error(
+                f"GET ASSIGNMENT FULL DETAILS [{request_id}]: Error communicating with the user service: {e}")
+            raise HTTPException(
+                status_code=500, detail="Error communicating with the user service")
+
+    full_details = {
+        "assignment_id": assignment_id,
+        "game": game_details,
+        "referees": referee_details if assignment.referees else None
+    }
+
+    logger.info(
+        f"GET ASSIGNMENT FULL DETAILS [{request_id}]: Successfully retrieved full assignment details")
+
+    return full_details
