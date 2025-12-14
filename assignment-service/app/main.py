@@ -192,6 +192,40 @@ async def create_assignment(assignment: AssignmentCreateRequest, request: Reques
         logger.warning(f"CREATE ASSIGNMENT [{request_id}]: Missing game_id")
         raise HTTPException(status_code=400, detail="Missing game_id")
 
+    # Validate game_id exists in game service DB
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{GAME_SERVICE_BASE}/games?game_id={assignment.game_id}")
+
+            if response.status_code != 200:
+                logger.warning(
+                    f"CREATE ASSIGNMENT [{request_id}]: game_id {assignment.game_id} not found in game service")
+                raise HTTPException(
+                    status_code=response.status_code, detail=response.json().get("detail", "Error from game service"))
+    except httpx.RequestError as e:
+        logger.error(
+            f"CREATE ASSIGNMENT [{request_id}]: Error communicating with the game service: {e}")
+        raise HTTPException(
+            status_code=500, detail="Error communicating with the game service")
+
+    if assignment.referees:
+        # Validate referee_id exists in user service DB
+        try:
+            async with httpx.AsyncClient() as client:
+                for referee in assignment.referees:
+                    response = await client.get(f"{USER_SERVICE_BASE}/users?user_id={referee.referee_id}")
+
+                    if response.status_code != 200:
+                        logger.warning(
+                            f"CREATE ASSIGNMENT [{request_id}]: referee_id {referee.referee_id} not found in user service")
+                        raise HTTPException(
+                            status_code=response.status_code, detail=response.json().get("detail", "Error from user service"))
+        except httpx.RequestError as e:
+            logger.error(
+                f"CREATE ASSIGNMENT [{request_id}]: Error communicating with the user service: {e}")
+            raise HTTPException(
+                status_code=500, detail="Error communicating with the user service")
+
     logger.info(f"CREATE ASSIGNMENT [{request_id}]: Adding assignment to DB")
     new_assignment = create_assignment_in_db(assignment)
 
