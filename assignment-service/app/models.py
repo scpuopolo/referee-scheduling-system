@@ -21,16 +21,16 @@ class Referee(BaseModel):
 
 class AssignmentCreateRequest(BaseModel):
     game_id: str = Field(...)
-    referee_ids: Optional[List[Referee]] = Field(default=None)
+    referees: Optional[List[Referee]] = Field(default=None)
 
 
 class AssignmentResponse(BaseModel):
-    assignment_id: str
-    referee_ids: Optional[List[Referee]]
+    id: str
+    referees: Optional[List[Referee]]
     game_id: str
     assigned_at: datetime
     updated_at: datetime
 
 
 class AssignmentUpdateRequest(BaseModel):
-    referee_ids: List[Referee] = Field(...)
+    referees: List[Referee] = Field(...)

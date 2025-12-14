@@ -1,14 +1,20 @@
 import logging
 import os
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import List, Optional
 
 import httpx
 from app.models import (AssignmentCreateRequest, AssignmentResponse,
                         AssignmentUpdateRequest, HealthCheckResponse)
+from db.db import (close_db_connection, create_assignment_in_db,
+                   delete_assignment_from_db, get_assignments_from_db, init_db,
+                   update_assignment_in_db)
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError, OperationalError
 from starlette.middleware.base import BaseHTTPMiddleware
 
 # TODO: Add redis caching
@@ -29,7 +35,14 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+    close_db_connection()
+
+app = FastAPI(lifespan=lifespan)
 
 # Middleware fpr request ID
 
@@ -42,6 +55,55 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(RequestIDMiddleware)
+
+# Global exception handlers
+
+
+@app.exception_handler(IntegrityError)
+async def integrity_error_handler(request: Request, e: IntegrityError):
+    request_id = getattr(request.state, "request_id", "unknown")
+    logger.warning(f"Integrity Error [{request_id}]: {e}")
+    return JSONResponse(
+        status_code=409,
+        content={"detail": "Duplicate game_id"}
+    )
+
+
+@app.exception_handler(OperationalError)
+async def operational_error_handler(request: Request, e: OperationalError):
+    request_id = getattr(request.state, "request_id", "unknown")
+    logger.error(f"Operational Error [{request_id}]: {e}")
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Database connection error"}
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request: Request, e: RequestValidationError):
+    request_id = getattr(request.state, "request_id", "unknown")
+
+    errors = e.errors()
+    if errors:
+        for i in range(0, len(errors)):
+            logger.warning(
+                f"Validation Error [{request_id}]: {errors[i].get('msg', 'Unknown validation error')}")
+    else:
+        logger.warning(
+            f"Validation Error [{request_id}]: No details available")
+
+    return JSONResponse(
+        status_code=400,
+        content={
+            "detail": [
+                {
+                    "loc": err["loc"] if "loc" in err else "",
+                    "msg": err["msg"] if "msg" in err else "",
+                    "type": err["type"] if "type" in err else ""
+                } for err in e.errors()
+            ]
+        }
+    )
 
 
 async def check_dependency_health(base_url: str) -> dict:
@@ -134,7 +196,7 @@ async def create_assignment(assignment: AssignmentCreateRequest, request: Reques
     new_assignment = create_assignment_in_db(assignment)
 
     logger.info(
-        f"CREATE ASSIGNMENT [{request_id}]: Assignment created with ID {new_assignment.assignment_id}")
+        f"CREATE ASSIGNMENT [{request_id}]: Assignment created with ID {new_assignment.id}")
 
     return new_assignment
 

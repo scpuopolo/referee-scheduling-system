@@ -55,6 +55,7 @@ services:
     environment:
       - USER_SERVICE_BASE=http://user-service:8000
       - GAME_SERVICE_BASE=http://game-service:8000
+      - PG_ASSIGNMENT_DSN=${PG_ASSIGNMENT_DSN}
     depends_on:
       user-service:
         condition: service_healthy
