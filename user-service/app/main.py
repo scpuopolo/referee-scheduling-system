@@ -6,7 +6,7 @@ from typing import List, Optional
 from app.models import (HealthCheckResponse, UserCreateRequest, UserResponse,
                         UserStatus, UserUpdateRequest)
 from db.db import (close_db_connection, create_user_in_db, delete_user_from_db,
-                   get_user_from_db, init_db, update_user_in_db)
+                   get_users_from_db, init_db, update_user_in_db)
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -219,7 +219,7 @@ def get_user(request: Request,
 
     logger.info(
         f"GET USER [{request_id}]: Retrieving user(s) with properties {properties}")
-    users = get_user_from_db(properties)
+    users = get_users_from_db(properties)
 
     if not users:
         logger.warning(
