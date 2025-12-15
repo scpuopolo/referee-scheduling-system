@@ -139,18 +139,26 @@ async def health_check():
 @app.post("/users", status_code=201, response_model=UserResponse)
 async def create_user(user: UserCreateRequest, request: Request):
     """
-    Create a new user.
+    Create a new user in the system.
 
-    This endpoint accepts a UserCreateRequest payload, validates required fields,
-    and inserts a new user record into the database. On successful creation, it
-    returns the newly created user along with a 201 Created status code.
+    This endpoint accepts a `UserCreateRequest` payload, validates all required fields,
+    inserts a new user record into the database, and caches the user in Redis. On success,
+    it returns the newly created user's details along with a 201 Created status.
 
-    Raises:
-        HTTPException (400): If one or more required fields are missing or invalid.
-        HTTPException (500): If an unexpected error occurs during user creation.
+    Args:
+        user (UserCreateRequest): The payload containing user details.
+        request (Request): The FastAPI request object, used here to access the request ID for logging.
 
     Returns:
         UserResponse: The newly created user's information.
+
+    Raises:
+        HTTPException (400): If any required field is missing or invalid (first name, last name, username, email, status).
+        HTTPException (500): If an unexpected error occurs during database insertion or caching.
+
+    Notes:
+        - User status must be either 'Official' or 'Non-Official'.
+        - After successful creation, the user object is cached in Redis for faster future retrieval.
     """
     request_id = request.state.request_id
 
@@ -212,27 +220,30 @@ async def get_user(request: Request,
                        default=None, min_length=5, max_length=255)
                    ):
     """
-    Retrieve users matching optional filter criteria.
+    Retrieve users based on optional filter criteria.
 
-    This endpoint returns a list of users filtered by any combination of
-    `user_id`, `status`, `username`, or `email`. All query parameters are optional.
-    If no parameters are provided, all users may be returned.
-
-    A 404 Not Found error is raised if no users match the given filters.
+    This endpoint returns a list of users filtered by any combination of `user_id`, 
+    `status`, `username`, or `email`. If no filters are provided, it may return all users. 
+    When only `user_id` is provided, the endpoint will first attempt to retrieve the user 
+    from the Redis cache before querying the database.
 
     Args:
-        request (Request): The incoming FastAPI request object.
+        request (Request): The FastAPI request object, used for logging request ID.
         user_id (str, optional): Filter by a specific user ID.
-        status (UserStatus, optional): Filter by the user's status.
-        username (str, optional): Filter by username.
-        email (EmailStr, optional): Filter by email address.
+        status (UserStatus, optional): Filter by the user's status ('Official' or 'Non-Official').
+        username (str, optional): Filter by username (1-100 characters).
+        email (EmailStr, optional): Filter by email address (5-255 characters).
+
+    Returns:
+        List[UserResponse]: A list of users that match the provided filter criteria.
 
     Raises:
         HTTPException (404): If no users match the provided filters.
-        HTTPException (500): If an unexpected error occurs during retrieval.
+        HTTPException (500): If an unexpected error occurs during retrieval or cache access.
 
-    Returns:
-        List[UserResponse]: A list of users that match the filter criteria.
+    Notes:
+        - If only `user_id` is provided, the Redis cache is checked first for faster retrieval.
+        - Partial or combination filters are supported; any user matching all specified filters will be returned.
     """
     request_id = request.state.request_id
 
@@ -279,25 +290,6 @@ async def get_user(request: Request,
     logger.info(
         f"GET USER [{request_id}]: User(s) with properties {properties} successfully retrieved")
 
-    # Potential to enable Redis caching for multiple users
-    """ # Update Redis cache
-    if len(users) <= 100:
-        logger.info(
-            f"GET USER [{request_id}]: Updating Redis cache for retrieved users")
-        for user in users:
-            try:
-                cached = redis_client.setex(f"user:{user.id}",
-                                            TTL_SECONDS, user.model_dump_json())
-                if not cached:
-                    logger.warning(
-                        f"GET USER [{request_id}]: Failed to update Redis cache for user ID {user.id}")
-                else:
-                    logger.info(
-                        f"GET USER [{request_id}]: Redis cache updated for user ID {user.id}")
-            except redis.RedisError as e:
-                logger.error(
-                    f"GET USER [{request_id}]: Error updating Redis cache for user ID {user.id}: {e}") """
-
     return users
 
 
@@ -306,22 +298,27 @@ async def update_user(user_id: str, user_update: UserUpdateRequest, request: Req
     """
     Update an existing user's details.
 
-    This endpoint applies the fields provided in the `UserUpdateRequest` payload
-    to the user identified by `user_id`. Only the supplied fields are updated.
-    If the user exists, the updated user data is returned with a 200 OK status.
-    If no matching user is found, a 404 Not Found error is raised.
+    This endpoint updates the user identified by `user_id` with the fields provided
+    in the `UserUpdateRequest` payload. Only the supplied fields are modified, and
+    other fields remain unchanged. After a successful update, the user data is also
+    updated in the Redis cache for faster future retrieval.
 
     Args:
         user_id (str): The unique identifier of the user to update.
-        user_update (UserUpdateRequest): The set of fields to modify for the user.
+        user_update (UserUpdateRequest): The fields to update for the user.
+        request (Request): The FastAPI request object, used for logging request ID.
+
+    Returns:
+        UserResponse: The updated user's information.
 
     Raises:
         HTTPException (404): If no user exists with the given `user_id`.
         HTTPException (400): If provided update data is invalid.
-        HTTPException (500): If an unexpected error occurs during the update.
+        HTTPException (500): If an unexpected error occurs during the update or cache operation.
 
-    Returns:
-        UserResponse: The user's updated information.
+    Notes:
+        - Only the fields present in the payload are updated; unspecified fields remain unchanged.
+        - After updating the database, the user's data is refreshed in the Redis cache.
     """
     request_id = request.state.request_id
 
@@ -358,21 +355,27 @@ async def update_user(user_id: str, user_update: UserUpdateRequest, request: Req
 @app.delete("/users/{user_id}", status_code=204)
 async def delete_user(user_id: str, request: Request):
     """
-    Delete a user by their user ID.
+    Delete a user by their unique ID.
 
     This endpoint removes the user identified by `user_id` from the database.
-    On successful deletion, it returns a 204 No Content status. If no user
-    exists with the given ID, a 404 Not Found error is raised.
+    On successful deletion, it also removes the user from the Redis cache. The
+    response returns a 204 No Content status. If no user exists with the given ID,
+    a 404 Not Found error is raised.
 
     Args:
         user_id (str): The unique identifier of the user to delete.
+        request (Request): The FastAPI request object, used for logging request ID.
+
+    Returns:
+        None: The response contains no content on successful deletion.
 
     Raises:
         HTTPException (404): If no user exists with the given `user_id`.
-        HTTPException (500): If an unexpected error occurs during deletion.
+        HTTPException (500): If an unexpected error occurs during deletion or cache removal.
 
-    Returns:
-        None: The response has no content on successful deletion.
+    Notes:
+        - After deletion from the database, the corresponding Redis cache entry is removed.
+        - This operation is idempotent: deleting a non-existent user results in a 404 error.
     """
     request_id = request.state.request_id
 

@@ -184,6 +184,32 @@ async def health_check():
 
 @app.post("/assignments", status_code=201, response_model=AssignmentResponse)
 async def create_assignment(assignment: AssignmentCreateRequest, request: Request):
+    """
+    Create a new assignment for a game.
+
+    This endpoint accepts an `AssignmentCreateRequest` payload, validates the presence
+    of the required `game_id`, verifies that the game exists in the game service, and
+    optionally validates that all referees listed are Official users in the user service.
+    Upon successful validation, the assignment is inserted into the database and the
+    newly created assignment is returned.
+
+    Args:
+        assignment (AssignmentCreateRequest): The payload containing assignment details,
+            including game ID and optional list of referee IDs.
+        request (Request): The FastAPI request object, used for logging request ID.
+
+    Returns:
+        AssignmentResponse: The newly created assignment's details.
+
+    Raises:
+        HTTPException (400): If required fields are missing or invalid (e.g., `game_id` is missing).
+        HTTPException (404): If the specified game or referee(s) cannot be found in their respective services.
+        HTTPException (500): If there is an unexpected error communicating with the game or user services or during database insertion.
+
+    Notes:
+        - Each referee in the assignment must have status 'Official'.
+        - Validates external services asynchronously using HTTP requests.
+    """
     request_id = request.state.request_id
 
     logger.info(f"CREATE ASSIGNMENT [{request_id}]: Request received")
@@ -241,6 +267,30 @@ async def get_assignments(request: Request,
                           game_id: Optional[str] = Query(default=None),
                           referee_id: Optional[str] = Query(default=None)
                           ):
+    """
+    Retrieve assignments based on optional filter criteria.
+
+    This endpoint returns a list of assignments filtered by any combination of
+    `assignment_id`, `game_id`, or `referee_id`. If no filters are provided, it may
+    return all assignments. Assignments are retrieved from the database.
+
+    Args:
+        request (Request): The FastAPI request object, used for logging request ID.
+        assignment_id (str, optional): Filter by a specific assignment ID.
+        game_id (str, optional): Filter by the ID of the associated game.
+        referee_id (str, optional): Filter by the ID of a referee assigned to the assignment.
+
+    Returns:
+        List[AssignmentResponse]: A list of assignments matching the provided filters.
+
+    Raises:
+        HTTPException (404): If no assignments match the provided filter criteria.
+        HTTPException (500): If an unexpected error occurs during retrieval.
+
+    Notes:
+        - Filters are optional; any assignment matching all specified filters will be returned.
+        - Supports filtering by assignment, game, and referee IDs individually or in combination.
+    """
     request_id = request.state.request_id
 
     properties = {}
@@ -269,6 +319,33 @@ async def get_assignments(request: Request,
 
 @app.put("/assignments/{assignment_id}", response_model=AssignmentResponse)
 async def update_assignment(assignment_id: str, assignment_update: AssignmentUpdateRequest, request: Request):
+    """
+    Update an existing assignment's details.
+
+    This endpoint updates the assignment identified by `assignment_id` with the fields 
+    provided in the `AssignmentUpdateRequest` payload. Only the supplied fields are 
+    modified. If referees are included in the update, each referee is validated as an 
+    Official user in the user service. On successful update, the updated assignment 
+    is returned.
+
+    Args:
+        assignment_id (str): The unique identifier of the assignment to update.
+        assignment_update (AssignmentUpdateRequest): The fields to update for the assignment.
+        request (Request): The FastAPI request object, used for logging request ID.
+
+    Returns:
+        AssignmentResponse: The updated assignment details.
+
+    Raises:
+        HTTPException (404): If no assignment exists with the given `assignment_id`.
+        HTTPException (400): If provided update data is invalid.
+        HTTPException (500): If there is an error communicating with the user service or updating the database.
+
+    Notes:
+        - Only the fields present in the payload are updated; unspecified fields remain unchanged.
+        - Referees must have status 'Official'; invalid referees will result in an error.
+        - Validates external user service asynchronously before updating the assignment.
+    """
     request_id = request.state.request_id
 
     logger.info(f"UPDATE ASSIGNMENT [{request_id}]: Request received")
@@ -309,6 +386,28 @@ async def update_assignment(assignment_id: str, assignment_update: AssignmentUpd
 
 @app.delete("/assignments/{assignment_id}", status_code=204)
 async def delete_assignment(assignment_id: str, request: Request):
+    """
+    Delete an assignment by its unique ID.
+
+    This endpoint removes the assignment identified by `assignment_id` from the database.
+    On successful deletion, the response returns a 204 No Content status. If no assignment 
+    exists with the given ID, a 404 Not Found error is raised.
+
+    Args:
+        assignment_id (str): The unique identifier of the assignment to delete.
+        request (Request): The FastAPI request object, used for logging request ID.
+
+    Returns:
+        None: The response contains no content on successful deletion.
+
+    Raises:
+        HTTPException (404): If no assignment exists with the given `assignment_id`.
+        HTTPException (500): If an unexpected error occurs during deletion.
+
+    Notes:
+        - This operation is idempotent: attempting to delete a non-existent assignment results in a 404 error.
+        - No external services are called; deletion affects only the local database.
+    """
     request_id = request.state.request_id
 
     logger.info(
@@ -328,6 +427,41 @@ async def delete_assignment(assignment_id: str, request: Request):
 
 @app.get("/assignments/full-details/{assignment_id}")
 async def get_assignments_full_details(assignment_id: str, request: Request):
+    """
+    Retrieve full details of an assignment, including game and referee information.
+
+    This endpoint fetches the assignment identified by `assignment_id` from the local
+    database, and then enriches it with detailed information about the associated game
+    from the game service and referee details from the user service. Referee data 
+    includes their position in the assignment.
+
+    Args:
+        assignment_id (str): The unique identifier of the assignment to retrieve.
+        request (Request): The FastAPI request object, used for logging request ID.
+
+    Returns:
+        dict: A dictionary containing the assignment ID, game details, and referee details 
+        (if any referees are assigned).
+
+        Example:
+        {
+            "assignment_id": "123",
+            "game": { ...game details... },
+            "referees": [
+                { "id": "ref1", "first_name": "John", "last_name": "Doe", "position": "Center" },
+                ...
+            ]
+        }
+
+    Raises:
+        HTTPException (404): If the assignment, game, or any referee cannot be found.
+        HTTPException (500): If there is an error communicating with the game or user services.
+
+    Notes:
+        - Referee positions are included from the assignment data.
+        - Fetches data asynchronously from external services for enriched details.
+        - The response combines data from the local database and external services.
+    """
     request_id = request.state.request_id
 
     logger.info(
