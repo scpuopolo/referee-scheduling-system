@@ -26,10 +26,16 @@ Find the full System Architecture Document [here](./SYSTEM_ARCHITECTURE.md).
     git clone https://github.com/scpuopolo/referee-scheduling-system.git
     cd referee-scheduling-system
     ```
+1. Add directories for logging in each service
+    - Must match the [project structure](#project-structure)
 1. Build and Run Containers
     ```bash
     docker compose up -d --build
     ```
+    - May also scale each service
+        ```bash
+        docker compose up -d --build --scale user-service=2 --scale game-service=2 --scale assignment-service=2
+        ```
 1. Verify Running Containers
     ```bash
     docker compose ps
@@ -38,8 +44,6 @@ Find the full System Architecture Document [here](./SYSTEM_ARCHITECTURE.md).
     ```bash
     docker compose down
     ```
-1. Add directories for logging in each service
-    - Must match the [project structure](#project-structure)
 
 ## Usage Instructions:
 ### Access from the Command Line
@@ -635,115 +639,15 @@ Find the full System Architecture Document [here](./SYSTEM_ARCHITECTURE.md).
     ```
 
 ## Testing:
-### Health Endpoints
-1. Build and Run Containers
+1. Navigate to the `referee-scheduling-system` directory in a terminal.
+1. Run the following commands to watch a shell test script run:
     ```bash
-    docker compose up -d --build
+    chmod +x ./tests/test.sh
     ```
-1. Verify Running Containers with Healthy Statuses
     ```bash
-    docker compose ps
+    ./tests/test.sh
     ```
-1. Verify Each Service's Endpoints Return Correct Responses
-    ### User Service:
-    In the command line, enter:
-    ```bash
-    docker compose exec user-service curl http://localhost:8000/health | jq
-    ```
-    Verify it returns:
-    ```json
-    {
-        "service": "user-service",
-        "status": "healthy",
-        "dependencies": null
-    }
-    ```
-    ### Game Service:
-    In the command line, enter:
-    ```bash
-    docker compose exec game-service curl http://localhost:8000/health | jq
-    ```
-    Verify it returns:
-    ```json
-    {
-        "service": "game-service",
-        "status": "healthy",
-        "dependencies": null
-    }
-    ```
-    ### Assignment Service:
-    In the command line, enter:
-    ```bash
-    docker compose exec assignment-service curl http://localhost:8000/health | jq
-    ```
-    Verify it returns:
-    ```json
-    {
-        "service": "assignment-service",
-        "status": "healthy",
-        "dependencies": {
-            "user-service": {"status": "healthy", "response_time_ms": 5.2},
-            "game-service": {"status": "healthy", "response_time_ms": 4.7}
-        }
-    }
-    ```
-    Then, In the command line, enter:
-    ```bash
-    docker compose down user-service
-    ```
-    Re-enter:
-    ```bash
-    docker compose exec assignment-service curl http://localhost:8000/health | jq
-    ```
-    The response should now be:
-    ```json
-    {
-        "service": "assignment-service",
-        "status": "unhealthy",
-        "dependencies": {
-            "user-service": {"status": "unhealthy", "response_time_ms": 3307.45},
-            "game-service": {"status": "healthy", "response_time_ms": 5.6}
-        }
-    }
-    ```
-    Again, in the command line, enter:
-    ```bash
-    docker compose down game-service
-    ```
-    Again re-enter:
-    ```bash
-    docker compose exec assignment-service curl http://localhost:8000/health | jq
-    ```
-    The response this time should be:
-    ```json
-    {
-        "service": "assignment-service",
-        "status": "unhealthy",
-        "dependencies": {
-            "user-service": {"status": "unhealthy", "response_time_ms": 3307.45},
-            "game-service": {"status": "unhealthy", "response_time_ms": 4021.82}
-        }
-    }
-    ```
-    Then, use the command line to bring the Game Service back:
-    ```bash
-    docker compose up -d game-service
-    ```
-    If you again enter:
-    ```bash
-    docker compose exec assignment-service curl http://localhost:8000/health | jq
-    ```
-    The final response should depict:
-    ```json
-    {
-        "service": "assignment-service",
-        "status": "unhealthy",
-        "dependencies": {
-            "user-service": {"status": "healthy", "response_time_ms": 3.7},
-            "game-service": {"status": "unhealthy", "response_time_ms": 4021.82}
-        }
-    }
-    ```
+
 ## Project Structure:
 The repository is organized as a microservice-based system with clearly separated services, shared infrastructure, and documentation. Each service follows a consistent internal layout to support independent development, testing, and deployment.
 ```bash
