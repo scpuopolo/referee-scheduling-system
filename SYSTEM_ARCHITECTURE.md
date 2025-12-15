@@ -1,11 +1,11 @@
 # System Architecture Document
 
 ## System Purpose:
-The **Referee Scheduling System** allows referees to input availability and get assigned by assignors to games that are registered by sports organizations.
+The **Referee Scheduling System** allows referees to get assigned by assignors to games that are registered by sports organizations.
 
 ## Service Boundaries:
 ### User Service
-**Responsibility:** Manages users information such as name, user type, contact info, availability, etc.
+**Responsibility:** Manages users information such as name, user type, contact info, etc.
 
 **Why Separate:**
 - Handles user data independently from other application components.
@@ -21,7 +21,7 @@ The **Referee Scheduling System** allows referees to input availability and get 
 - Simplifies the ability to update or change game details without impacting user or assignment services.
 
 ### Assignment Service
-**Responsibility:** Coordinates referee assignments and reports.
+**Responsibility:** Coordinates referee assignments.
 
 **Why Separate:**
 - Communicates with both the User and Game services, so it should be decoupled from each to maintain clear service boundaries.
@@ -87,5 +87,5 @@ The **Referee Scheduling System** includes health monitoring logic that verifies
 | Web Server | Uvicorn | ASGI server optimized for FastAPI |
 | Data Modeling / Validation | Pydantic v2 | Automatically enforces consistency and correctness for models and schemas |
 | Database | Postgres 16 | Reliable, scalable relational database with strong SQL support and first-class integration across Python tooling |
-<!-- Eventually add Redis after caching implementation -->
+Caching | Redis | In-memory data store used to cache frequently accessed data and reduce database load, improving response times and overall system performance
 
