@@ -3,9 +3,6 @@ services:
     build:
       context: ./user-service
       dockerfile: Dockerfile
-    container_name: user-service
-    ports:
-      - "8001:8000"
     environment:
       - PG_USER_DSN=${PG_USER_DSN}
       - REDIS_HOST=${REDIS_HOST}
@@ -31,9 +28,6 @@ services:
     build:
       context: ./game-service
       dockerfile: Dockerfile
-    container_name: game-service
-    ports:
-      - "8002:8000"
     environment:
       - PG_GAME_DSN=${PG_GAME_DSN}
     depends_on:
@@ -54,9 +48,6 @@ services:
     build:
       context: ./assignment-service
       dockerfile: Dockerfile
-    container_name: assignment-service
-    ports:
-      - "8003:8000"
     environment:
       - USER_SERVICE_BASE=http://user-service:8000
       - GAME_SERVICE_BASE=http://game-service:8000
@@ -147,6 +138,23 @@ services:
       interval: 5s
       timeout: 2s
       retries: 10
+  nginx:
+    image: nginx:alpine
+    container_name: api-gateway
+    depends_on:
+      user-service:
+        condition: service_healthy
+      game-service:
+        condition: service_healthy
+      assignment-service:
+        condition: service_healthy
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    networks:
+      - scheduling-network
 
 volumes:
   pgdata-user:
